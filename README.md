@@ -1,5 +1,7 @@
 # Native Microphone Service
 
+![Screenshot](screenie.png?raw=true "App Screenshot")
+
 Web Audio can be really crap sometimes. Recording a microphone is one such example. Eventually I just got fed up and decided to use a native Cordova plug-in.
 
 This repo is a minimal Ionic test app with the native microphone provider. It was created to do testing on a range of devices where skip-free audio recording using Web Audio is apparently too much to ask.

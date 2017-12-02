@@ -1,14 +1,38 @@
 <ion-header>
   <ion-navbar>
     <ion-title>
-      Ionic Blank
+      Native Microphone Test
     </ion-title>
   </ion-navbar>
 </ion-header>
 
-<ion-content padding>
-  The world is your oyster.
-  <p>
-    If you get lost, the <a href="http://ionicframework.com/docs/v2">docs</a> will be your guide.
-  </p>
+<ion-content>
+  <div class="elapsed">{{ elapsedTime }}</div>
+  <div class="column">
+  <button ion-button (click)="clickRecord()" [color]="isRecording() ? 'danger' : ''">
+    {{ isRecording() ? 'Stop' : 'Record' }}
+  </button>
+  <button ion-button [disabled]="!hasData()" (click)="clickClearLast()">
+    Clear Last
+  </button>
+  <button ion-button [disabled]="!hasData()" (click)="clickClear()">
+    Clear All
+  </button>
+  <button ion-button (click)="test()">
+    Noise Test
+  </button>
+  <button ion-button [disabled]="!hasData()" (click)="clickPlay()">
+    Play All
+  </button>
+</div>
+
+<ion-list>
+  <ion-item *ngFor="let seg of segments; let i = index">
+    {{ seg.ms }}ms
+    <button ion-button icon-only clear item-end (click)="clickSegment(i)">
+      <ion-icon name="play"></ion-icon>
+    </button>
+  </ion-item>
+</ion-list>
+
 </ion-content>

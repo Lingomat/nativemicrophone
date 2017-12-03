@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { NavController, Platform } from 'ionic-angular';
-import { NativeMicrophoneProvider,  RecordStats } from '../../providers/native-microphone/native-microphone'
+import { NativeMicrophone,  RecordStats } from '../../providers/native-microphone/native-microphone'
 
 @Component({
   selector: 'page-home',
@@ -12,7 +12,7 @@ export class HomePage {
   segments: RecordStats[] = []
   constructor(
     public navCtrl: NavController, 
-    public mic:  NativeMicrophoneProvider,
+    public mic:  NativeMicrophone,
     public platform: Platform) {
     
   }

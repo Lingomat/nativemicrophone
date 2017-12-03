@@ -7,7 +7,7 @@ import { Diagnostic } from '@ionic-native/diagnostic';
 
 import { MyApp } from './app.component';
 import { HomePage } from '../pages/home/home';
-import { NativeMicrophoneProvider } from '../providers/native-microphone/native-microphone';
+import { NativeMicrophone } from '../providers/native-microphone/native-microphone';
 
 @NgModule({
   declarations: [
@@ -27,7 +27,7 @@ import { NativeMicrophoneProvider } from '../providers/native-microphone/native-
     StatusBar,
     SplashScreen,
     {provide: ErrorHandler, useClass: IonicErrorHandler},
-    NativeMicrophoneProvider,
+    NativeMicrophone,
     Diagnostic
   ]
 })

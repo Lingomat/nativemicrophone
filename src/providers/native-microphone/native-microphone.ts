@@ -29,12 +29,12 @@ export interface RecordStats {
 }
 
 @Injectable()
-export class NativeMicrophoneProvider {
+export class NativeMicrophone {
   progressSubject: Subject<any> = new Subject()
   defaultOptions: MicOptions = {
     sampleRate: 16000,
     streamToWebAudio: false,
-    bufferSize: 8192,
+    bufferSize: 2048,
     normalization: false,
     //normalizationFactor: 32767.0,
     channels: 1,
@@ -54,6 +54,9 @@ export class NativeMicrophoneProvider {
   audioErrorEventFunction = this._errorListener.bind(this)
   progressInterval: number
   startTime: Date
+  paused: boolean
+  elapsedTime: number = 0
+  stopLoops: number = 0
   constructor() {
     
   }
@@ -89,8 +92,13 @@ export class NativeMicrophoneProvider {
       Object.assign(cfg, options)
     }
     this.customOptions = cfg
+    this.currentBuffer = []
+    this.finalBuffers = []
+    this.elapsedTime = 0
+    this.hasData = false  
     audioinput.initialize(this.customOptions)
     if (!this.initialized) {
+      console.log('initializing listeners')
       window.addEventListener('audioinput', this.audioInputEventFunction, false)
       window.addEventListener("audioinputerror", this.audioErrorEventFunction, false)
       this.initialized = true
@@ -101,6 +109,7 @@ export class NativeMicrophoneProvider {
     if (this.initialized) {
       window.removeEventListener( "audioinput", this.audioInputEventFunction)
       window.removeEventListener( "audioinputerror", this.audioErrorEventFunction)
+      this.initialized = false
     }
   }
 
@@ -111,40 +120,49 @@ export class NativeMicrophoneProvider {
   }
 
   record() {
+    console.log('mic: record()')
     audioinput.start(this.customOptions)
     this.startTime = new Date()
+    this.elapsedTime = 0
     this._progressTick()
   }
 
   async stop(): Promise<RecordStats> {
-    if (!audioinput.isCapturing()) {
-      throw new Error('Called stop when not capturing.')
+    if (!audioinput.isCapturing() && !this.paused) {
+      throw new Error('Called stop when not capturing and not paused.')
     }
     if (this.stopping) {
       throw new Error('Called stop() when already stopping.')
     }
-    // There's probably a nice way to do this by using some direct signalling from
-    // the audioinput listener
-    this.stopping = true
-    let loop = 0
-    while (this.stopping && loop < 50) {
-      await this._waitMs(50)
-      ++loop
+    // If we are recording... then empty the buffer and stuff - if not, we were paused
+    if (audioinput.isCapturing()) {
+      // There's probably a nice way to do this by using some direct signalling from
+      // the audioinput listener
+      this.stopping = true
+      let loop = 0
+      while (this.stopping && loop < 50) {
+        await this._waitMs(50)
+        ++loop
+      }
+      if (loop === 50) {
+        audioinput.stop()
+        throw new Error('stop() did not get valid stop state after 2000ms.')
+      }
     }
-    if (loop === 50) {
-      audioinput.stop()
-      throw new Error('stop() did not get valid stop state after 2000ms.')
+    this.paused = false
+    if (this.currentBuffer.length !== 0) {
+      let ab = new Float32Array(this.currentBuffer)
+      this.finalBuffers.push(ab)
+      this.currentBuffer = []
     }
-    audioinput.stop()
-    this.hasData = true
-    let ab = new Float32Array(this.currentBuffer)
-    this.finalBuffers.push(ab)
-    this.currentBuffer = []
+    this.elapsedTime = 0
+    this.hasData = this.finalBuffers.length > 0
     return this.getLastlength()
   }
 
+  // should be called only when stopped?
   getElapsed() {
-
+    return this.getTotalLength().ms
   }
 
   observeProgress(): Observable<number> {
@@ -153,6 +171,10 @@ export class NativeMicrophoneProvider {
 
   isRecording(): boolean {
     return audioinput.isCapturing()
+  }
+
+  isPaused(): boolean {
+    return this.paused
   }
 
   hasRecordedData(): boolean {
@@ -168,6 +190,7 @@ export class NativeMicrophoneProvider {
     }
     this.currentBuffer = []
     this.finalBuffers = []
+    this.elapsedTime = 0
     this.hasData = false  
     this._updateStopProgress()
   }
@@ -180,6 +203,48 @@ export class NativeMicrophoneProvider {
       }
       this._updateStopProgress()
     }
+  }
+
+  // Cancel action stops recorder and kills current recording segment
+  cancel(): void {
+    if (audioinput.isCapturing()) {
+      audioinput.stop()
+    }
+    this.currentBuffer = []
+    this.paused = false
+  }
+
+  async pause(): Promise<any> {
+    if (this.paused) {
+      throw new Error('Called pause() but is already paused.')
+    }
+    if (!audioinput.isCapturing()) {
+      throw new Error('Called pause() but is not recording.')
+    }
+    console.log('mic: pause()')
+    this.stopping = true
+    let loop = 0
+    while (this.stopping && loop < 50) {
+      await this._waitMs(50)
+      ++loop
+    }
+    if (loop === 50) {
+      audioinput.stop()
+      throw new Error('stop() did not get valid stop state after 2000ms.')
+    }
+    this.paused = true
+    this.elapsedTime += ((new Date()).valueOf() - this.startTime.valueOf())
+  }
+
+  resume(): void {
+    if (!this.paused) {
+      throw new Error('Called resume() but is not paused.')
+    }
+    console.log('mic: resume()')
+    this.paused = false
+    this.startTime = new Date()
+    audioinput.start(this.customOptions)
+    this._progressTick()
   }
 
   getTotalLength(): { frames: number, ms: number } {
@@ -267,7 +332,7 @@ export class NativeMicrophoneProvider {
         this._reportProgress()
         this._progressTick()
       }
-    })
+    }, this.progressInterval)
   }
 
   _reportProgress() {
@@ -279,7 +344,8 @@ export class NativeMicrophoneProvider {
       ts += f.length
     }
     let ot = ts ? Math.round((ts / this.customOptions.sampleRate) * 1000) : 0
-    this.progressSubject.next(ot + ms) // report offset + elapsed of this segment
+    // elapsed time is length of final buffers (ot), length since this rec start (ms) and paused elapsed times (elapsedTime)
+    this.progressSubject.next(this.elapsedTime + ot + ms) 
   }
 
   _updateStopProgress() {
@@ -313,13 +379,18 @@ export class NativeMicrophoneProvider {
     })
   }
   _audioinputListener(evt)  {
-    this.currentBuffer.push(...evt.data.slice()) // I woner about performance
+    this.currentBuffer.push(...evt.data.slice()) // I wonder about performance
     if (this.stopping) {
-      this.stopping = false
+      ++this.stopLoops
+      if (this.stopLoops === 2) { // grab a couple of buffer iterations to avoid truncated audio
+        this.stopping = false
+        audioinput.stop()
+        this.stopLoops = 0
+      }
     }
   }
   _errorListener(evt) {
-    console.log('error', evt)
+    console.log('micrphone error', evt)
   }
 
 }
